@@ -211,11 +211,12 @@ class Punic(object):
                 tags = self.revisions_for_binary(specification.identifier.remote_url)
             else:
                 repository = self._repository_for_identifier(specification.identifier)
-                identifier = repository.identifier
+
                 if repository is None:
                     logging.warning("<err>Warning</err>: Bad repository: {}".format(specification.identifier.remote_url))
                     return None
 
+                identifier = repository.identifier
                 tags = repository.revisions_for_predicate(specification.predicate)
                 if specification.predicate.operator == VersionOperator.commitish:
                     try:
