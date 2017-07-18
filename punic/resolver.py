@@ -15,6 +15,7 @@ class Resolver(object):
     def __init__(self, root, dependencies_for_node):
         self.root = root
         self.dependencies_for_node = dependencies_for_node
+        self.dependency_cache = {}
 
     def build_graph(self, dependency_filter=None):
         # type: ([str]) -> DiGraph
@@ -22,7 +23,14 @@ class Resolver(object):
         def populate_graph(graph, parent, depth=0):
             graph.add_node(parent)
 
-            for child_identifier, child_versions in self._dependencies_for_node(parent):
+            if parent in self.dependency_cache:
+                dependencies = self.dependency_cache[parent]
+            else:
+                logging.debug('<sub>Dependency</sub> <err>Cache miss</err> <sub>for</sub> <ref>{}</ref>'.format(parent))
+                dependencies = self._dependencies_for_node(parent)
+                self.dependency_cache[parent] = dependencies
+
+            for child_identifier, child_versions in dependencies:
                 for child_version in child_versions:
                     child = Node(child_identifier, child_version)
                     if dependency_filter and dependency_filter(child.identifier, child.version) == False:

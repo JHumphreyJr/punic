@@ -154,7 +154,9 @@ class SemanticVersion(object):
         """
         match = SemanticVersion.expression.match(s)
         if not match:
-            raise Exception('"{}" not a semantic version.'.format(s))
+            match = SemanticVersion.expression.match(s.rstrip('.'))
+            if not match:
+                raise Exception('"{}" not a semantic version.'.format(s))
         d = match.groupdict()
         major = int(d['major']) if d['major'] else 0
         minor = int(d['minor']) if d['minor'] else 0
