@@ -104,16 +104,16 @@ class ProjectIdentifier(object):
 
         match = re.match(r'^(?P<source>github|git|binary)\s+"(?P<link>.+)"', string)
         if not match:
-            raise Exception('No match')
+            raise Exception('No match for {}'.format(string))
 
         source = match.group('source')
         link = match.group('link')
         isBinary = False
 
         if source == 'github':
-            match = re.match(r'(?P<remote_url>(?:.*?)(?:/|:))*(?P<team_name>[^/]+)/(?P<project_name>[^/]+?)(?:\.git)?$', link)
+            match = re.match(r'(?P<remote_url>(?:.*?)(?:/|:))*(?P<team_name>[^/]+)/(?P<project_name>[^/]+?)(?:\.git)?$', link.rstrip('/'))
             if not match:
-                raise Exception('No match')
+                raise Exception('No match for {}'.format(link))
             team_name = match.group('team_name')
             project_name = match.group('project_name')
             remote_url = match.group('remote_url') or 'github.com/'
@@ -134,7 +134,7 @@ class ProjectIdentifier(object):
             remote_url = link
             isBinary = True
         else:
-            raise Exception('No match')
+            raise Exception('No match {}'.format(string))
 
         return ProjectIdentifier(source=source, remote_url=remote_url, team_name=team_name, project_name=project_name,
             overrides=overrides, isBinary=isBinary)
@@ -161,10 +161,15 @@ class ProjectIdentifier(object):
 
     @mproperty
     def identifier(self):
-        components = [] \
-                     + ([self.team_name] if self.team_name else []) \
-                     + ([self.project_name] if self.project_name else [])
-        return '/'.join(components)
+        identifier = ''
+        if self.source == 'binary':
+            identifier = 'binary:' + self.remote_url
+        else:
+            components = [] \
+                         + ([self.team_name] if self.team_name else []) \
+                         + ([self.project_name] if self.project_name else [])
+            identifier = '/'.join(components)
+        return identifier
 
     def __repr__(self):
         return self.identifier
