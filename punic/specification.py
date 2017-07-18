@@ -108,43 +108,50 @@ class ProjectIdentifier(object):
 
         source = match.group('source')
         link = match.group('link')
+        url_parts = urlparse.urlparse(link)
         isBinary = False
+        isEnterprise = False
 
         if source == 'github':
+            isEnterprise = url_parts.hostname is not None and re.match(r'github\.com', url_parts.hostname) is None
             match = re.match(r'(?P<remote_url>(?:.*?)(?:/|:))*(?P<team_name>[^/]+)/(?P<project_name>[^/]+?)(?:\.git)?$', link.rstrip('/'))
             if not match:
                 raise Exception('No match for {}'.format(link))
             team_name = match.group('team_name')
             project_name = match.group('project_name')
-            remote_url = match.group('remote_url') or 'github.com/'
 
-            scheme = 'git@' if use_ssh else 'https://'
-            remote_url = '{}{}{}/{}.git'.format(scheme, remote_url, team_name, project_name)
-        elif source == 'git':
+            if isEnterprise:
+                remote_url = link
+            else:
+                remote_url = match.group('remote_url') or 'github.com/'
+                scheme = 'git@' if use_ssh else 'https://'
+                remote_url = '{}{}{}/{}.git'.format(scheme, remote_url, team_name, project_name)
+        elif source == 'git' or source == 'github':
             team_name = None
-            url_parts = urlparse.urlparse(link)
             path = Path(url_parts.path)
             project_name = path.stem
             remote_url = link
         elif source == 'binary':
             team_name = None
             project_name = None
-            url_parts = None
             path = None
             remote_url = link
             isBinary = True
         else:
             raise Exception('No match {}'.format(string))
 
-        return ProjectIdentifier(source=source, remote_url=remote_url, team_name=team_name, project_name=project_name,
-            overrides=overrides, isBinary=isBinary)
+        return ProjectIdentifier(source=source, team_name=team_name, project_name=project_name, host=url_parts.hostname, remote_url=remote_url,
+            overrides=overrides, isEnterprise=isEnterprise, isBinary=isBinary)
 
-    def __init__(self, source=None, team_name=None, project_name=None, remote_url=None, overrides=None, isBinary=False):
+    def __init__(self, source=None, team_name=None, project_name=None, host=None, remote_url=None, overrides=None, isEnterprise=False, isBinary=False):
         self.source = source
         self.team_name = team_name
         self.project_name = project_name
+        self.host = host
         self.remote_url = remote_url
+        self.isEnterprise = isEnterprise
         self.isBinary = isBinary
+
         if overrides and self.project_name in overrides:
             override_url = overrides[self.project_name]
             logging.info('Overriding {} with git URL {}'.format(self.project_name, override_url))
@@ -152,10 +159,10 @@ class ProjectIdentifier(object):
 
     @mproperty
     def full_identifier(self):
-        if self.source == 'git' or self.source == 'binary':
-            return '{} "{}"'.format(self.source, self.remote_url)
-        elif self.source == 'github':
+        if self.source == 'github' and not self.isEnterprise:
             return '{} "{}/{}"'.format(self.source, self.team_name, self.project_name)
+        elif self.source == 'git' or self.source == 'github' or self.source == 'binary':
+            return '{} "{}"'.format(self.source, self.remote_url)
         else:
             raise Exception("Unknown source")
 
@@ -166,6 +173,7 @@ class ProjectIdentifier(object):
             identifier = 'binary:' + self.remote_url
         else:
             components = [] \
+                         + ([self.host] if self.host and self.source == 'github' and self.isEnterprise else []) \
                          + ([self.team_name] if self.team_name else []) \
                          + ([self.project_name] if self.project_name else [])
             identifier = '/'.join(components)
