@@ -50,7 +50,7 @@ class Specification(object):
         punic-cartfile-issue
         """
 
-        match = re.match(r'^(?P<address>(?P<service>github|git)\s+"[^/]+/(?:.+?)")(?:\s+(?P<predicate>.+)?)?', string)
+        match = re.match(r'^(?P<address>(?P<service>github|git|binary)\s+"[^/]+/(?:.+?)")(?:\s+(?P<predicate>.+)?)?', string)
         if not match:
             raise Exception('Bad spec {}'.format(string))
 
@@ -102,12 +102,13 @@ class ProjectIdentifier(object):
         assert isinstance(string, six.string_types)
         assert isinstance(use_ssh, bool)
 
-        match = re.match(r'^(?P<source>github|git)\s+"(?P<link>.+)"', string)
+        match = re.match(r'^(?P<source>github|git|binary)\s+"(?P<link>.+)"', string)
         if not match:
             raise Exception('No match')
 
         source = match.group('source')
         link = match.group('link')
+        isBinary = False
 
         if source == 'github':
             match = re.match(r'(?P<remote_url>(?:.*?)(?:/|:))*(?P<team_name>[^/]+)/(?P<project_name>[^/]+?)(?:\.git)?$', link)
@@ -125,17 +126,25 @@ class ProjectIdentifier(object):
             path = Path(url_parts.path)
             project_name = path.stem
             remote_url = link
+        elif source == 'binary':
+            team_name = None
+            project_name = None
+            url_parts = None
+            path = None
+            remote_url = link
+            isBinary = True
         else:
             raise Exception('No match')
 
         return ProjectIdentifier(source=source, remote_url=remote_url, team_name=team_name, project_name=project_name,
-            overrides=overrides)
+            overrides=overrides, isBinary=isBinary)
 
-    def __init__(self, source=None, team_name=None, project_name=None, remote_url=None, overrides=None):
+    def __init__(self, source=None, team_name=None, project_name=None, remote_url=None, overrides=None, isBinary=False):
         self.source = source
         self.team_name = team_name
         self.project_name = project_name
         self.remote_url = remote_url
+        self.isBinary = isBinary
         if overrides and self.project_name in overrides:
             override_url = overrides[self.project_name]
             logging.info('Overriding {} with git URL {}'.format(self.project_name, override_url))
@@ -143,7 +152,7 @@ class ProjectIdentifier(object):
 
     @mproperty
     def full_identifier(self):
-        if self.source == 'git':
+        if self.source == 'git' or self.source == 'binary':
             return '{} "{}"'.format(self.source, self.remote_url)
         elif self.source == 'github':
             return '{} "{}/{}"'.format(self.source, self.team_name, self.project_name)
@@ -154,7 +163,7 @@ class ProjectIdentifier(object):
     def identifier(self):
         components = [] \
                      + ([self.team_name] if self.team_name else []) \
-                     + [self.project_name]
+                     + ([self.project_name] if self.project_name else [])
         return '/'.join(components)
 
     def __repr__(self):

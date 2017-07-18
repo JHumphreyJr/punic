@@ -193,7 +193,7 @@ class Revision(object):
         commitish = 'commitish'
 
     def __init__(self, repository, revision, revision_type, check = True):
-        assert isinstance(repository, Repository)
+        #assert isinstance(repository, Repository)
         assert isinstance(revision, six.string_types)
         #        assert isinstance(revision_type, Revision.Type) # TODO: This doesn't work.
         self.repository = repository

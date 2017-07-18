@@ -20,6 +20,10 @@ from .xcode import XcodeBuildArguments
 import punic.shshutil as shutil
 from .errors import NoSuchRevision
 
+# Binary Extensions
+import urllib.request
+import json
+
 current_session = None
 
 
@@ -49,6 +53,9 @@ class Punic(object):
 
     def _dependencies_for_node(self, node):
         assert not node.version or isinstance(node.version, Revision)
+        if node.identifier.isBinary:
+            return []
+
         dependencies = self.dependencies_for_project_and_tag(identifier=node.identifier, tag=node.version)
         return dependencies
 
@@ -161,13 +168,34 @@ class Punic(object):
             return self.all_repositories[identifier]
         else:
             repository = Repository(self, identifier=identifier)
-            if self.config.fetch:
-                repository.fetch()
+            if self.config.fetch and not identifier.isBinary:
+                try:
+                    repository.fetch()
+                except Exception as e:
+                    logging.warning(e)
+                    return None
+
             self.all_repositories[identifier] = repository
             return repository
 
+    # Binary Revisions
+    def revisions_for_binary(self, url):
+        response = urllib.request.urlopen(url)
+        responseString = response.read().decode('utf-8')
+        json_obj = json.loads(responseString)
+        json.dumps(json_obj)
+
+        revisions = []
+        for key in json_obj.keys():
+            revision = Revision(repository=repository, revision=key, revision_type=Revision.Type.tag, check=False)
+            revisions.append(revision)
+
+        return revisions
+
     def dependencies_for_project_and_tag(self, identifier, tag):
         # type: (ProjectIdentifier, Revision) -> [ProjectIdentifier, [Revision]]
+        if identifier.isBinary:
+            return None
 
         assert isinstance(identifier, ProjectIdentifier)
         assert not tag or isinstance(tag, Revision)
@@ -176,18 +204,30 @@ class Punic(object):
         specifications = repository.specifications_for_revision(tag)
 
         def make(specification):
-            repository = self._repository_for_identifier(specification.identifier)
-            tags = repository.revisions_for_predicate(specification.predicate)
-            if specification.predicate.operator == VersionOperator.commitish:
-                try:
-                    revision = Revision(repository=repository, revision=specification.predicate.value, revision_type=Revision.Type.commitish, check = True)
-                except NoSuchRevision as e:
-                    logging.warning("<err>Warning</err>: {}".format(e.message))
+            tags = []
+            identifier = specification.identifier
+
+            if specification.identifier.isBinary:
+                tags = self.revisions_for_binary(specification.identifier.remote_url)
+            else:
+                repository = self._repository_for_identifier(specification.identifier)
+                identifier = repository.identifier
+                if repository is None:
+                    logging.warning("<err>Warning</err>: Bad repository: {}".format(specification.identifier.remote_url))
                     return None
-                tags.append(revision)
-                tags.sort()
-            assert len(tags)
-            return repository.identifier, tags
+
+                tags = repository.revisions_for_predicate(specification.predicate)
+                if specification.predicate.operator == VersionOperator.commitish:
+                    try:
+                        revision = Revision(repository=repository, revision=specification.predicate.value, revision_type=Revision.Type.commitish, check = True)
+                    except NoSuchRevision as e:
+                        logging.warning("<err>Warning</err>: {}".format(e.message))
+                        return None
+                    tags.append(revision)
+                    tags.sort()
+                assert len(tags)
+
+            return identifier, tags
 
         dependencies = [make(specification) for specification in specifications]
         dependencies = [dependency for dependency in dependencies if dependency]
